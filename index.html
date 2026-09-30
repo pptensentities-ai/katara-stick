@@ -19,12 +19,14 @@
     <button type="button" onclick="setIntent('sit_cross')">sit</button>
     <button type="button" onclick="setIntent('wave')">wave</button>
     <button type="button" onclick="setIntent('wiggle_hips')">wiggle</button>
+    <button type="button" onclick="startAct(60000)">act</button>
     <span id="state">stand</span>
   </div>
   <canvas id="c"></canvas>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script>
     const INTENT_URL = 'https://raw.githubusercontent.com/pptensentities-ai/katara-stick/main/intent.json';
+    const POSES = ['stand', 'sit_cross', 'wave', 'wiggle_hips'];
     const canvas = document.getElementById('c');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 50);
@@ -102,15 +104,42 @@
     var intent = 'stand';
     var target = catalog.stand;
     var lastT = -1;
+    var actTimer = 0;
+    var actUntil = 0;
     var qT = new THREE.Quaternion();
     var qC = new THREE.Quaternion();
-    window.setIntent = function (name, source) {
+    function poseOnly(name, source) {
       if (!catalog[name]) name = 'stand';
       intent = name;
       target = catalog[intent];
       document.getElementById('state').textContent = intent + (source ? ' · ' + source : '');
+    }
+    window.startAct = function (ms) {
+      clearInterval(actTimer);
+      actUntil = Date.now() + (ms || 60000);
+      const tick = () => {
+        if (Date.now() > actUntil) {
+          clearInterval(actTimer);
+          poseOnly('wave', 'act-done');
+          return;
+        }
+        const pick = POSES[Math.floor(Math.random() * POSES.length)];
+        const left = Math.max(0, Math.ceil((actUntil - Date.now()) / 1000));
+        poseOnly(pick, 'act ' + left + 's');
+      };
+      tick();
+      actTimer = setInterval(tick, 2200);
     };
-    setIntent(new URLSearchParams(location.search).get('intent') || 'wave', 'boot');
+    window.setIntent = function (name, source) {
+      if (name === 'act_random' || name === 'random' || name === 'act') {
+        startAct(60000);
+        return;
+      }
+      clearInterval(actTimer);
+      poseOnly(name, source);
+    };
+    const boot = new URLSearchParams(location.search).get('intent') || 'act_random';
+    setIntent(boot, 'boot');
 
     async function poll() {
       try {

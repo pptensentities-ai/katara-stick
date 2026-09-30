@@ -1,5 +1,5 @@
 {
-  "intent": "wave",
-  "t": 3,
-  "source": "ara-live"
+  "intent": "act_random",
+  "t": 4,
+  "source": "ara-live-minute"
 }
