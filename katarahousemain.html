@@ -1,1 +1,49 @@
-PLACEHOLDER
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no"/>
+<title>katarahousemain</title>
+<style>html,body{margin:0;height:100%;background:#111;color:#eee;font-family:-apple-system,sans-serif}#boot{padding:24px}</style>
+</head>
+<body>
+<div id="boot">loading pie + grass…</div>
+<script>
+const PIE = 'https://raw.githubusercontent.com/pptensentities-ai/katara-stick/4f097531405c5d51f417c75e7f05e10bef142436/index.html';
+const GRASS = `
+    const TILES = 100;
+    const gc = document.createElement('canvas');
+    gc.width = TILES; gc.height = TILES;
+    const gg = gc.getContext('2d');
+    for (let z = 0; z < TILES; z++) {
+      for (let x = 0; x < TILES; x++) {
+        const n = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453;
+        const f = n - Math.floor(n);
+        gg.fillStyle = 'rgb(' + (58 + f * 40 | 0) + ',' + (118 + f * 50 | 0) + ',' + (40 + f * 22 | 0) + ')';
+        gg.fillRect(x, z, 1, 1);
+      }
+    }
+    const grassTex = new THREE.CanvasTexture(gc);
+    grassTex.magFilter = THREE.NearestFilter;
+    grassTex.minFilter = THREE.NearestFilter;
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(24, 24),
+      new THREE.MeshStandardMaterial({ map: grassTex, roughness: 1 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.01;
+    scene.add(ground);
+`;
+fetch(PIE).then(r => r.text()).then(html => {
+  html = html.replace('<title>Katara house</title>', '<title>katarahousemain</title>');
+  html = html.replace('<div>Katara house</div>', '<div>katarahousemain</div>');
+  html = html.replace('scene.add(new THREE.GridHelper(24, 24, 0x3a3344, 0x221c28));', GRASS);
+  document.open();
+  document.write(html);
+  document.close();
+}).catch(err => {
+  document.getElementById('boot').textContent = 'load failed: ' + err;
+});
+</script>
+</body>
+</html>
