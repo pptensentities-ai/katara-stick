@@ -6,7 +6,7 @@
   <title>Katara stick</title>
   <style>
     html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: -apple-system, sans-serif; overflow: hidden; touch-action: none; }
-    #hud { position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 2; max-width: 92vw; }
+    #hud { position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 2; max-width: 94vw; }
     button { color: #111; background: #ddd; border: 0; padding: 10px 12px; margin: 4px 6px 0 0; border-radius: 8px; font-size: 16px; }
     button.on { background: #8fd18f; }
     #state { display: block; margin-top: 10px; font-size: 14px; }
@@ -22,17 +22,20 @@
     <button type="button" id="b-wiggle_hips" onclick="setIntent('wiggle_hips')">wiggle</button>
     <button type="button" id="b-walk" onclick="setIntent('walk')">walk</button>
     <button type="button" onclick="startAct(60000)">act</button>
-    <span id="state">walk · tap ground</span>
+    <span id="state">walk · tap ground or the switch</span>
   </div>
   <canvas id="c"></canvas>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script>
     const INTENT_URL = 'https://raw.githubusercontent.com/pptensentities-ai/katara-stick/main/intent.json';
     const POSES = ['stand', 'sit_cross', 'wave', 'wiggle_hips', 'walk'];
+    const SWITCH_NEAR = 1.15;
     const canvas = document.getElementById('c');
     const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x141416);
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 80);
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     function fit() {
       renderer.setSize(innerWidth, innerHeight, false);
       camera.aspect = innerWidth / innerHeight;
@@ -41,7 +44,11 @@
     fit();
     addEventListener('resize', fit);
     scene.add(new THREE.GridHelper(16, 32, 0x445544, 0x222222));
-    scene.add(new THREE.AmbientLight(0xffffff, 1));
+    const ambient = new THREE.AmbientLight(0xfff4e8, 0.55);
+    scene.add(ambient);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.45);
+    fill.position.set(3, 6, 4);
+    scene.add(fill);
 
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(40, 40),
@@ -58,9 +65,63 @@
     marker.visible = false;
     scene.add(marker);
 
-    const mat = new THREE.MeshNormalMaterial();
-    function bone(len) { return new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 8), mat); }
-    function joint() { return new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 10), mat); }
+    const lamp = new THREE.PointLight(0xff3344, 0.2, 8);
+    const switchRoot = new THREE.Group();
+    switchRoot.position.set(2.4, 0, -1.6);
+    scene.add(switchRoot);
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.05, 1.35, 10),
+      new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6 })
+    );
+    pole.position.y = 0.675;
+    switchRoot.add(pole);
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(0.22, 0.34, 0.08),
+      new THREE.MeshStandardMaterial({ color: 0x222222 })
+    );
+    plate.position.set(0, 1.22, 0.06);
+    switchRoot.add(plate);
+    const knobMat = new THREE.MeshStandardMaterial({ color: 0xff2a2a, emissive: 0x661111, roughness: 0.35 });
+    const knob = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.08), knobMat);
+    knob.position.set(0, 1.22, 0.12);
+    switchRoot.add(knob);
+    lamp.position.set(0, 1.45, 0.2);
+    switchRoot.add(lamp);
+    const hitSwitch = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 1.6, 0.5),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    hitSwitch.position.y = 0.8;
+    hitSwitch.userData.kind = 'switch';
+    switchRoot.add(hitSwitch);
+    var lampOn = false;
+    function setLamp(on) {
+      lampOn = on;
+      knobMat.color.set(on ? 0x3dff6a : 0xff2a2a);
+      knobMat.emissive.set(on ? 0x0d5a22 : 0x661111);
+      lamp.color.set(on ? 0xb6ffc4 : 0xff3344);
+      lamp.intensity = on ? 1.6 : 0.18;
+      ambient.intensity = on ? 0.85 : 0.45;
+      scene.background.set(on ? 0x1b2430 : 0x141416);
+    }
+    setLamp(false);
+
+    const skin = new THREE.MeshStandardMaterial({ color: 0xf0c3ae, roughness: 0.55 });
+    const shirt = new THREE.MeshStandardMaterial({ color: 0xd48bb3, roughness: 0.5 });
+    const pants = new THREE.MeshStandardMaterial({ color: 0x3a3a52, roughness: 0.6 });
+    const hairM = new THREE.MeshStandardMaterial({ color: 0x2b1a14, roughness: 0.7 });
+    const white = new THREE.MeshStandardMaterial({ color: 0xfff7f2 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x22110c });
+    const blush = new THREE.MeshStandardMaterial({ color: 0xf3a0a8, roughness: 0.8 });
+    const hide = new THREE.MeshBasicMaterial({ visible: false });
+
+    function bone(len) {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 6), hide);
+      m.userData.len = len;
+      return m;
+    }
+    function joint() { return new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), hide); }
+    function cap(mat, r, h) { return new THREE.Mesh(new THREE.CapsuleGeometry(r, h, 4, 8), mat); }
 
     const body = new THREE.Group();
     scene.add(body);
@@ -76,6 +137,55 @@
     lThigh.add(lShin); rThigh.add(rShin);
     lThigh.position.set(-0.12, -0.05, 0); rThigh.position.set(0.12, -0.05, 0);
     lShin.position.y = -0.38; rShin.position.y = -0.38;
+
+    const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), pants);
+    pelvis.scale.set(1.15, 0.7, 0.85);
+    hips.add(pelvis);
+    const shirtMesh = cap(shirt, 0.13, 0.28);
+    shirtMesh.position.y = 0.02;
+    torso.add(shirtMesh);
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 14), skin);
+    head.add(headMesh);
+    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), hairM);
+    hair.scale.set(1.05, 0.72, 1.05);
+    hair.position.set(0, 0.07, -0.01);
+    head.add(hair);
+    const bun = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), hairM);
+    bun.position.set(0.11, 0.12, -0.02);
+    head.add(bun);
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), white);
+    const eyeR = eyeL.clone();
+    eyeL.position.set(-0.05, 0.02, 0.13);
+    eyeR.position.set(0.05, 0.02, 0.13);
+    head.add(eyeL); head.add(eyeR);
+    const pupL = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), dark);
+    const pupR = pupL.clone();
+    pupL.position.set(-0.05, 0.02, 0.15);
+    pupR.position.set(0.05, 0.02, 0.15);
+    head.add(pupL); head.add(pupR);
+    const cheekL = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), blush);
+    const cheekR = cheekL.clone();
+    cheekL.position.set(-0.08, -0.02, 0.12);
+    cheekR.position.set(0.08, -0.02, 0.12);
+    head.add(cheekL); head.add(cheekR);
+
+    function limbFit(parent, mat, r, h) {
+      const m = cap(mat, r, h);
+      parent.add(m);
+      return m;
+    }
+    limbFit(lArm, shirt, 0.05, 0.22);
+    limbFit(rArm, shirt, 0.05, 0.22);
+    const handL = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), skin);
+    handL.position.y = -0.2; lArm.add(handL);
+    const handR = handL.clone(); handR.position.y = -0.2; rArm.add(handR);
+    limbFit(lThigh, pants, 0.065, 0.26);
+    limbFit(rThigh, pants, 0.065, 0.26);
+    limbFit(lShin, pants, 0.05, 0.24);
+    limbFit(rShin, pants, 0.05, 0.24);
+    const footL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.14), dark);
+    footL.position.set(0, -0.22, 0.03); lShin.add(footL);
+    const footR = footL.clone(); rShin.add(footR);
 
     const parts = { hips: hips, lArm: lArm, rArm: rArm, lThigh: lThigh, rThigh: rThigh, lShin: lShin, rShin: rShin };
     function P(x,y,z, rx,ry,rz) {
@@ -120,14 +230,24 @@
       },
       walk: {
         hips: P(0, 0.95, 0, 0,0,0),
-        lArm: P(-0.18, 0.12, 0, 0,0,0.5),
-        rArm: P(0.18, 0.12, 0, 0,0,-0.5),
-        lThigh: P(-0.12, -0.05, 0, 0,0,0.06),
-        rThigh: P(0.12, -0.05, 0, 0,0,-0.06),
+        lArm: P(-0.18, 0.12, 0, 0,0,0.35),
+        rArm: P(0.18, 0.12, 0, 0,0,-0.35),
+        lThigh: P(-0.12, -0.05, 0, 0,0,0.05),
+        rThigh: P(0.12, -0.05, 0, 0,0,-0.05),
         lShin: P(0, -0.38, 0, 0,0,0),
         rShin: P(0, -0.38, 0, 0,0,0)
       }
     };
+
+    function snapPose(name) {
+      const pose = catalog[name] || catalog.stand;
+      for (const key in parts) {
+        const obj = parts[key];
+        const tg = pose[key];
+        obj.position.copy(tg.pos);
+        obj.rotation.copy(tg.rot);
+      }
+    }
 
     var intent = 'walk';
     var target = catalog.walk;
@@ -135,12 +255,9 @@
     var actTimer = 0;
     var actUntil = 0;
     var walkTarget = new THREE.Vector3(0, 0, 0);
-    var walking = false;
-    var faceY = 0;
     var qT = new THREE.Quaternion();
     var qC = new THREE.Quaternion();
-
-    var cam = { theta: 0.7, phi: 0.55, dist: 4.4, lookY: 0.9 };
+    var cam = { theta: 0.7, phi: 0.55, dist: 4.6, lookY: 0.95 };
     function placeCam() {
       const x = body.position.x + Math.sin(cam.theta) * Math.cos(cam.phi) * cam.dist;
       const y = cam.lookY + Math.sin(cam.phi) * cam.dist;
@@ -150,6 +267,9 @@
     }
     placeCam();
 
+    function nearSwitch() {
+      return body.position.distanceTo(switchRoot.position) <= SWITCH_NEAR;
+    }
     function highlight() {
       ['stand','sit_cross','wave','wiggle_hips','walk'].forEach((id) => {
         const el = document.getElementById('b-' + id);
@@ -158,17 +278,19 @@
     }
     function poseOnly(name, source) {
       if (!catalog[name]) name = 'stand';
+      const enteringWalk = name === 'walk';
+      if (enteringWalk) snapPose('walk');
       intent = name;
       target = catalog[intent];
-      walking = (name === 'walk');
-      if (!walking) marker.visible = false;
+      if (!enteringWalk) marker.visible = false;
+      let extra = '';
+      if (enteringWalk) extra = nearSwitch() ? ' · switch in reach' : ' · tap ground or switch';
       document.getElementById('state').textContent =
-        intent + (walking ? ' · tap ground' : '') + (source ? ' · ' + source : '');
+        intent + extra + (source ? ' · ' + source : '');
       highlight();
     }
     window.startAct = function (ms) {
       clearInterval(actTimer);
-      walking = false;
       marker.visible = false;
       actUntil = Date.now() + (ms || 60000);
       const tick = () => {
@@ -195,12 +317,15 @@
 
     const ray = new THREE.Raycaster();
     const ndc = new THREE.Vector2();
-    function screenToGround(cx, cy) {
+    function pick(cx, cy) {
       ndc.x = (cx / innerWidth) * 2 - 1;
       ndc.y = -(cy / innerHeight) * 2 + 1;
       ray.setFromCamera(ndc, camera);
-      const hits = ray.intersectObject(ground);
-      return hits.length ? hits[0].point : null;
+      const sw = ray.intersectObject(hitSwitch, false);
+      if (sw.length) return { kind: 'switch' };
+      const g = ray.intersectObject(ground);
+      if (g.length) return { kind: 'ground', pt: g[0].point };
+      return null;
     }
     function goTo(pt) {
       if (!pt) return;
@@ -210,32 +335,36 @@
       if (intent !== 'walk') poseOnly('walk', 'tap');
       else document.getElementById('state').textContent = 'walk · going';
     }
-
-    const pointers = new Map();
-    var pinch0 = 0;
-    var dist0 = 4.4;
-    var theta0 = 0.7;
-    var phi0 = 0.55;
-    var mid0x = 0, mid0y = 0;
-    var two = false;
-
-    function pts() { return Array.from(pointers.values()); }
-    function dist2(a, b) {
-      const dx = a.x - b.x, dy = a.y - b.y;
-      return Math.hypot(dx, dy);
+    function tapAt(cx, cy) {
+      const hit = pick(cx, cy);
+      if (!hit) return;
+      if (hit.kind === 'switch') {
+        if (nearSwitch()) {
+          setLamp(!lampOn);
+          document.getElementById('state').textContent =
+            'switch ' + (lampOn ? 'ON green' : 'OFF red');
+        } else {
+          goTo(switchRoot.position);
+          document.getElementById('state').textContent = 'walk · too far — go to switch';
+        }
+        return;
+      }
+      if (intent === 'walk') goTo(hit.pt);
     }
 
+    const pointers = new Map();
+    var pinch0 = 0, dist0 = 4.6, theta0 = 0.7, phi0 = 0.55, mid0x = 0, mid0y = 0, two = false;
+    function pts() { return Array.from(pointers.values()); }
+    function dist2(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.target.closest && false) return;
       canvas.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       const p = pts();
       if (p.length === 2) {
         two = true;
         pinch0 = dist2(p[0], p[1]);
-        dist0 = cam.dist;
-        theta0 = cam.theta;
-        phi0 = cam.phi;
+        dist0 = cam.dist; theta0 = cam.theta; phi0 = cam.phi;
         mid0x = (p[0].x + p[1].x) / 2;
         mid0y = (p[0].y + p[1].y) / 2;
       }
@@ -261,25 +390,16 @@
       const last = pointers.get(e.pointerId);
       pointers.delete(e.pointerId);
       if (pointers.size < 2) {
-        if (!wasTwo && countBefore === 1 && last && intent === 'walk') {
-          goTo(screenToGround(last.x, last.y));
-        }
+        if (!wasTwo && countBefore === 1 && last) tapAt(last.x, last.y);
         two = false;
-        const p = pts();
-        if (p.length === 1) {
-          pinch0 = 0;
-        }
       }
     }
     canvas.addEventListener('pointerup', endPtr);
     canvas.addEventListener('pointercancel', endPtr);
-
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     var rdrag = false, rx0 = 0, ry0 = 0, rth = 0, rph = 0;
     canvas.addEventListener('mousedown', (e) => {
-      if (e.button === 2) {
-        rdrag = true; rx0 = e.clientX; ry0 = e.clientY; rth = cam.theta; rph = cam.phi;
-      }
+      if (e.button === 2) { rdrag = true; rx0 = e.clientX; ry0 = e.clientY; rth = cam.theta; rph = cam.phi; }
     });
     addEventListener('mouseup', () => { rdrag = false; });
     addEventListener('mousemove', (e) => {
@@ -311,12 +431,11 @@
     setInterval(poll, 1200);
     poll();
 
-    const blend = 0.12;
+    const blend = 0.14;
     const walkSpeed = 1.7;
     (function loop(now) {
       requestAnimationFrame(loop);
       const dt = 0.016;
-
       if (intent === 'walk') {
         const dx = walkTarget.x - body.position.x;
         const dz = walkTarget.z - body.position.z;
@@ -325,24 +444,27 @@
           const step = Math.min(dist, walkSpeed * dt);
           body.position.x += (dx / dist) * step;
           body.position.z += (dz / dist) * step;
-          faceY = Math.atan2(dx, dz);
-          body.rotation.y = faceY;
+          body.rotation.y = Math.atan2(dx, dz);
           const g = now / 140;
-          lThigh.rotation.x = Math.sin(g) * 0.55;
-          rThigh.rotation.x = Math.sin(g + Math.PI) * 0.55;
-          lShin.rotation.x = Math.max(0, -Math.sin(g) * 0.35);
-          rShin.rotation.x = Math.max(0, -Math.sin(g + Math.PI) * 0.35);
-          lArm.rotation.x = Math.sin(g + Math.PI) * 0.4;
-          rArm.rotation.x = Math.sin(g) * 0.4;
+          lThigh.rotation.set(Math.sin(g) * 0.55, 0, 0.05);
+          rThigh.rotation.set(Math.sin(g + Math.PI) * 0.55, 0, -0.05);
+          lShin.rotation.set(Math.max(0, -Math.sin(g) * 0.35), 0, 0);
+          rShin.rotation.set(Math.max(0, -Math.sin(g + Math.PI) * 0.35), 0, 0);
+          lArm.rotation.set(Math.sin(g + Math.PI) * 0.4, 0, 0.35);
+          rArm.rotation.set(Math.sin(g) * 0.4, 0, -0.35);
+          hips.rotation.set(0, 0, 0);
           hips.position.y = 0.95 + Math.abs(Math.sin(g)) * 0.03;
         } else {
           marker.visible = false;
-          lThigh.rotation.x = THREE.MathUtils.lerp(lThigh.rotation.x, 0, 0.15);
-          rThigh.rotation.x = THREE.MathUtils.lerp(rThigh.rotation.x, 0, 0.15);
-          lShin.rotation.x = THREE.MathUtils.lerp(lShin.rotation.x, 0, 0.15);
-          rShin.rotation.x = THREE.MathUtils.lerp(rShin.rotation.x, 0, 0.15);
-          lArm.rotation.x = THREE.MathUtils.lerp(lArm.rotation.x, 0, 0.15);
-          rArm.rotation.x = THREE.MathUtils.lerp(rArm.rotation.x, 0, 0.15);
+          lThigh.rotation.x = THREE.MathUtils.lerp(lThigh.rotation.x, 0, 0.18);
+          rThigh.rotation.x = THREE.MathUtils.lerp(rThigh.rotation.x, 0, 0.18);
+          lShin.rotation.x = THREE.MathUtils.lerp(lShin.rotation.x, 0, 0.18);
+          rShin.rotation.x = THREE.MathUtils.lerp(rShin.rotation.x, 0, 0.18);
+          lArm.rotation.x = THREE.MathUtils.lerp(lArm.rotation.x, 0, 0.18);
+          rArm.rotation.x = THREE.MathUtils.lerp(rArm.rotation.x, 0, 0.18);
+          if (nearSwitch()) {
+            document.getElementById('state').textContent = 'walk · switch in reach — tap it';
+          }
         }
         placeCam();
       } else {
