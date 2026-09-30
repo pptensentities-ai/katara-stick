@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Katara stick</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: -apple-system, sans-serif; }
+    #hud { position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 2; }
+    a, button { color: #111; background: #ddd; border: 0; padding: 10px 12px; margin: 4px 6px 0 0; border-radius: 8px; text-decoration: none; display: inline-block; }
+    #state { display: block; margin-top: 10px; opacity: 0.85; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div>Katara stick · iPhone</div>
+    <a href="?intent=stand">stand</a>
+    <a href="?intent=sit_cross">sit</a>
+    <a href="?intent=wave">wave</a>
+    <a href="?intent=wiggle_hips">wiggle</a>
+    <span id="state"></span>
+  </div>
+  <script type="importmap">
+    { "imports": { "three": "https://unpkg.com/three@0.170.0/build/three.module.js" } }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    const params = new URLSearchParams(location.search);
+    let intent = params.get('intent') || 'stand';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 50);
+    camera.position.set(2.2, 1.6, 3.4);
+    camera.lookAt(0, 0.9, 0);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+    scene.add(new THREE.GridHelper(6, 12, 0x334433, 0x222222));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const mat = new THREE.MeshNormalMaterial();
+    const bone = (len) => new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 6), mat);
+    const joint = () => new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), mat);
+    const hips = joint(); scene.add(hips);
+    const torso = bone(0.45); hips.add(torso); torso.position.y = 0.28;
+    const head = joint(); torso.add(head); head.position.y = 0.32;
+    const lArm = bone(0.32); const rArm = bone(0.32);
+    torso.add(lArm); torso.add(rArm);
+    lArm.position.set(-0.18, 0.12, 0); rArm.position.set(0.18, 0.12, 0);
+    const lThigh = bone(0.4); const rThigh = bone(0.4);
+    const lShin = bone(0.38); const rShin = bone(0.38);
+    hips.add(lThigh); hips.add(rThigh);
+    lThigh.add(lShin); rThigh.add(rShin);
+    lThigh.position.set(-0.12, -0.05, 0); rThigh.position.set(0.12, -0.05, 0);
+    lShin.position.y = -0.38; rShin.position.y = -0.38;
+
+    const poses = {
+      stand() {
+        hips.position.set(0, 0.95, 0); hips.rotation.set(0,0,0);
+        lArm.rotation.set(0,0,0.4); rArm.rotation.set(0,0,-0.4);
+        lThigh.rotation.set(0,0,0.05); rThigh.rotation.set(0,0,-0.05);
+        lShin.rotation.set(0,0,0); rShin.rotation.set(0,0,0);
+      },
+      sit_cross() {
+        hips.position.set(0, 0.28, 0); hips.rotation.set(0.15,0,0);
+        lArm.rotation.set(0.2,0,0.5); rArm.rotation.set(0.2,0,-0.5);
+        lThigh.rotation.set(1.1,0.6,0.7); rThigh.rotation.set(1.1,-0.6,-0.7);
+        lShin.rotation.set(1.3,0.2,0); rShin.rotation.set(1.3,-0.2,0);
+      },
+      wave() { poses.stand(); rArm.rotation.set(0,0,-2.4); },
+      wiggle_hips() { poses.stand(); hips.rotation.z = 0.25; }
+    };
+    if (!poses[intent]) intent = 'stand';
+    poses[intent]();
+    document.getElementById('state').textContent = intent;
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+    (function loop(now) {
+      requestAnimationFrame(loop);
+      if (intent === 'wave') rArm.rotation.z = -2.1 + Math.sin(now / 180) * 0.45;
+      if (intent === 'wiggle_hips') hips.rotation.z = Math.sin(now / 140) * 0.35;
+      renderer.render(scene, camera);
+    })();
+  </script>
+</body>
+</html>
