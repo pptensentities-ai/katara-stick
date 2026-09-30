@@ -14,7 +14,7 @@
 </head>
 <body>
   <div id="hud">
-    <div>Katara stick</div>
+    <div>Katara stick — live</div>
     <button type="button" onclick="setIntent('stand')">stand</button>
     <button type="button" onclick="setIntent('sit_cross')">sit</button>
     <button type="button" onclick="setIntent('wave')">wave</button>
@@ -24,6 +24,7 @@
   <canvas id="c"></canvas>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script>
+    const INTENT_URL = 'https://raw.githubusercontent.com/pptensentities-ai/katara-stick/main/intent.json';
     const canvas = document.getElementById('c');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 50);
@@ -100,15 +101,30 @@
 
     var intent = 'stand';
     var target = catalog.stand;
+    var lastT = -1;
     var qT = new THREE.Quaternion();
     var qC = new THREE.Quaternion();
-    window.setIntent = function (name) {
+    window.setIntent = function (name, source) {
       if (!catalog[name]) name = 'stand';
       intent = name;
       target = catalog[intent];
-      document.getElementById('state').textContent = intent;
+      document.getElementById('state').textContent = intent + (source ? ' · ' + source : '');
     };
-    setIntent(new URLSearchParams(location.search).get('intent') || 'stand');
+    setIntent(new URLSearchParams(location.search).get('intent') || 'wave', 'boot');
+
+    async function poll() {
+      try {
+        const res = await fetch(INTENT_URL + '?cache=' + Date.now());
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.t !== lastT && data.intent) {
+          lastT = data.t;
+          setIntent(data.intent, data.source || 'chat');
+        }
+      } catch (e) {}
+    }
+    setInterval(poll, 1200);
+    poll();
 
     const blend = 0.08;
     (function loop(now) {
