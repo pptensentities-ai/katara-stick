@@ -1,5 +1,5 @@
 {
-  "intent": "act_random",
-  "t": 4,
-  "source": "ara-live-minute"
+  "intent": "walk",
+  "t": 5,
+  "source": "ara-walk"
 }

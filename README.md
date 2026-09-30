@@ -1,10 +1,15 @@
 # katara-stick
 Public stickman for phone Chrome (no Xara).
 
-Open:
+Open the latest file (hard refresh):
 
-- https://raw.githack.com/pptensentities-ai/katara-stick/main/index.html
-- or with a pose: add `?intent=sit_cross` / `stand` / `wave` / `wiggle_hips`
+https://raw.githack.com/pptensentities-ai/katara-stick/main/index.html
 
-Ara writes `intent.json` from chat. The page polls GitHub raw every second.
-Buttons work even if poll is lagging.
+## Controls
+
+- stand / sit / wave / wiggle / act — poses
+- **walk** — tap or click the ground to send her there
+- **two fingers** — drag to orbit the camera, pinch to zoom
+- desktop: left click walks (in walk mode); right-drag orbits; wheel zooms
+
+Ara can still write `intent.json` (`stand`, `sit_cross`, `wave`, `wiggle_hips`, `walk`, `act_random`).

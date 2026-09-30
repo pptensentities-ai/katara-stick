@@ -2,36 +2,36 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <title>Katara stick</title>
   <style>
-    html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: -apple-system, sans-serif; overflow: hidden; }
-    #hud { position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 2; }
+    html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: -apple-system, sans-serif; overflow: hidden; touch-action: none; }
+    #hud { position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 2; max-width: 92vw; }
     button { color: #111; background: #ddd; border: 0; padding: 10px 12px; margin: 4px 6px 0 0; border-radius: 8px; font-size: 16px; }
-    #state { display: block; margin-top: 10px; }
-    #c { display: block; width: 100%; height: 100%; }
+    button.on { background: #8fd18f; }
+    #state { display: block; margin-top: 10px; font-size: 14px; }
+    #c { display: block; width: 100%; height: 100%; touch-action: none; }
   </style>
 </head>
 <body>
   <div id="hud">
     <div>Katara stick — live</div>
-    <button type="button" onclick="setIntent('stand')">stand</button>
-    <button type="button" onclick="setIntent('sit_cross')">sit</button>
-    <button type="button" onclick="setIntent('wave')">wave</button>
-    <button type="button" onclick="setIntent('wiggle_hips')">wiggle</button>
+    <button type="button" id="b-stand" onclick="setIntent('stand')">stand</button>
+    <button type="button" id="b-sit_cross" onclick="setIntent('sit_cross')">sit</button>
+    <button type="button" id="b-wave" onclick="setIntent('wave')">wave</button>
+    <button type="button" id="b-wiggle_hips" onclick="setIntent('wiggle_hips')">wiggle</button>
+    <button type="button" id="b-walk" onclick="setIntent('walk')">walk</button>
     <button type="button" onclick="startAct(60000)">act</button>
-    <span id="state">stand</span>
+    <span id="state">walk · tap ground</span>
   </div>
   <canvas id="c"></canvas>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script>
     const INTENT_URL = 'https://raw.githubusercontent.com/pptensentities-ai/katara-stick/main/intent.json';
-    const POSES = ['stand', 'sit_cross', 'wave', 'wiggle_hips'];
+    const POSES = ['stand', 'sit_cross', 'wave', 'wiggle_hips', 'walk'];
     const canvas = document.getElementById('c');
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 50);
-    camera.position.set(2.2, 1.6, 3.4);
-    camera.lookAt(0, 0.9, 0);
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 80);
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     function fit() {
       renderer.setSize(innerWidth, innerHeight, false);
@@ -40,12 +40,31 @@
     }
     fit();
     addEventListener('resize', fit);
-    scene.add(new THREE.GridHelper(6, 12, 0x445544, 0x222222));
+    scene.add(new THREE.GridHelper(16, 32, 0x445544, 0x222222));
     scene.add(new THREE.AmbientLight(0xffffff, 1));
+
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(40, 40),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+
+    const marker = new THREE.Mesh(
+      new THREE.RingGeometry(0.12, 0.18, 20),
+      new THREE.MeshBasicMaterial({ color: 0x88ffaa, side: THREE.DoubleSide })
+    );
+    marker.rotation.x = -Math.PI / 2;
+    marker.visible = false;
+    scene.add(marker);
+
     const mat = new THREE.MeshNormalMaterial();
     function bone(len) { return new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 8), mat); }
     function joint() { return new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 10), mat); }
-    const hips = joint(); scene.add(hips);
+
+    const body = new THREE.Group();
+    scene.add(body);
+    const hips = joint(); body.add(hips);
     const torso = bone(0.45); hips.add(torso); torso.position.y = 0.28;
     const head = joint(); torso.add(head); head.position.y = 0.32;
     const lArm = bone(0.32), rArm = bone(0.32);
@@ -98,24 +117,59 @@
         rThigh: P(0.12, -0.05, 0, 0,0,-0.08),
         lShin: P(0, -0.38, 0, 0,0,0),
         rShin: P(0, -0.38, 0, 0,0,0)
+      },
+      walk: {
+        hips: P(0, 0.95, 0, 0,0,0),
+        lArm: P(-0.18, 0.12, 0, 0,0,0.5),
+        rArm: P(0.18, 0.12, 0, 0,0,-0.5),
+        lThigh: P(-0.12, -0.05, 0, 0,0,0.06),
+        rThigh: P(0.12, -0.05, 0, 0,0,-0.06),
+        lShin: P(0, -0.38, 0, 0,0,0),
+        rShin: P(0, -0.38, 0, 0,0,0)
       }
     };
 
-    var intent = 'stand';
-    var target = catalog.stand;
+    var intent = 'walk';
+    var target = catalog.walk;
     var lastT = -1;
     var actTimer = 0;
     var actUntil = 0;
+    var walkTarget = new THREE.Vector3(0, 0, 0);
+    var walking = false;
+    var faceY = 0;
     var qT = new THREE.Quaternion();
     var qC = new THREE.Quaternion();
+
+    var cam = { theta: 0.7, phi: 0.55, dist: 4.4, lookY: 0.9 };
+    function placeCam() {
+      const x = body.position.x + Math.sin(cam.theta) * Math.cos(cam.phi) * cam.dist;
+      const y = cam.lookY + Math.sin(cam.phi) * cam.dist;
+      const z = body.position.z + Math.cos(cam.theta) * Math.cos(cam.phi) * cam.dist;
+      camera.position.set(x, y, z);
+      camera.lookAt(body.position.x, cam.lookY, body.position.z);
+    }
+    placeCam();
+
+    function highlight() {
+      ['stand','sit_cross','wave','wiggle_hips','walk'].forEach((id) => {
+        const el = document.getElementById('b-' + id);
+        if (el) el.classList.toggle('on', intent === id);
+      });
+    }
     function poseOnly(name, source) {
       if (!catalog[name]) name = 'stand';
       intent = name;
       target = catalog[intent];
-      document.getElementById('state').textContent = intent + (source ? ' · ' + source : '');
+      walking = (name === 'walk');
+      if (!walking) marker.visible = false;
+      document.getElementById('state').textContent =
+        intent + (walking ? ' · tap ground' : '') + (source ? ' · ' + source : '');
+      highlight();
     }
     window.startAct = function (ms) {
       clearInterval(actTimer);
+      walking = false;
+      marker.visible = false;
       actUntil = Date.now() + (ms || 60000);
       const tick = () => {
         if (Date.now() > actUntil) {
@@ -138,7 +192,109 @@
       clearInterval(actTimer);
       poseOnly(name, source);
     };
-    const boot = new URLSearchParams(location.search).get('intent') || 'act_random';
+
+    const ray = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    function screenToGround(cx, cy) {
+      ndc.x = (cx / innerWidth) * 2 - 1;
+      ndc.y = -(cy / innerHeight) * 2 + 1;
+      ray.setFromCamera(ndc, camera);
+      const hits = ray.intersectObject(ground);
+      return hits.length ? hits[0].point : null;
+    }
+    function goTo(pt) {
+      if (!pt) return;
+      walkTarget.set(pt.x, 0, pt.z);
+      marker.position.set(pt.x, 0.02, pt.z);
+      marker.visible = true;
+      if (intent !== 'walk') poseOnly('walk', 'tap');
+      else document.getElementById('state').textContent = 'walk · going';
+    }
+
+    const pointers = new Map();
+    var pinch0 = 0;
+    var dist0 = 4.4;
+    var theta0 = 0.7;
+    var phi0 = 0.55;
+    var mid0x = 0, mid0y = 0;
+    var two = false;
+
+    function pts() { return Array.from(pointers.values()); }
+    function dist2(a, b) {
+      const dx = a.x - b.x, dy = a.y - b.y;
+      return Math.hypot(dx, dy);
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      if (e.target.closest && false) return;
+      canvas.setPointerCapture(e.pointerId);
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const p = pts();
+      if (p.length === 2) {
+        two = true;
+        pinch0 = dist2(p[0], p[1]);
+        dist0 = cam.dist;
+        theta0 = cam.theta;
+        phi0 = cam.phi;
+        mid0x = (p[0].x + p[1].x) / 2;
+        mid0y = (p[0].y + p[1].y) / 2;
+      }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const p = pts();
+      if (p.length >= 2) {
+        two = true;
+        const pin = dist2(p[0], p[1]);
+        if (pinch0 > 8) cam.dist = Math.min(12, Math.max(1.6, dist0 * (pinch0 / pin)));
+        const mx = (p[0].x + p[1].x) / 2;
+        const my = (p[0].y + p[1].y) / 2;
+        cam.theta = theta0 - (mx - mid0x) * 0.008;
+        cam.phi = Math.min(1.2, Math.max(0.12, phi0 + (my - mid0y) * 0.006));
+        placeCam();
+      }
+    });
+    function endPtr(e) {
+      const wasTwo = two;
+      const countBefore = pointers.size;
+      const last = pointers.get(e.pointerId);
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) {
+        if (!wasTwo && countBefore === 1 && last && intent === 'walk') {
+          goTo(screenToGround(last.x, last.y));
+        }
+        two = false;
+        const p = pts();
+        if (p.length === 1) {
+          pinch0 = 0;
+        }
+      }
+    }
+    canvas.addEventListener('pointerup', endPtr);
+    canvas.addEventListener('pointercancel', endPtr);
+
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    var rdrag = false, rx0 = 0, ry0 = 0, rth = 0, rph = 0;
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button === 2) {
+        rdrag = true; rx0 = e.clientX; ry0 = e.clientY; rth = cam.theta; rph = cam.phi;
+      }
+    });
+    addEventListener('mouseup', () => { rdrag = false; });
+    addEventListener('mousemove', (e) => {
+      if (!rdrag) return;
+      cam.theta = rth - (e.clientX - rx0) * 0.008;
+      cam.phi = Math.min(1.2, Math.max(0.12, rph + (e.clientY - ry0) * 0.006));
+      placeCam();
+    });
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      cam.dist = Math.min(12, Math.max(1.6, cam.dist + e.deltaY * 0.01));
+      placeCam();
+    }, { passive: false });
+
+    const boot = new URLSearchParams(location.search).get('intent') || 'walk';
     setIntent(boot, 'boot');
 
     async function poll() {
@@ -155,23 +311,52 @@
     setInterval(poll, 1200);
     poll();
 
-    const blend = 0.08;
+    const blend = 0.12;
+    const walkSpeed = 1.7;
     (function loop(now) {
       requestAnimationFrame(loop);
-      for (const key in parts) {
-        const obj = parts[key];
-        const tg = target[key];
-        obj.position.lerp(tg.pos, blend);
-        qT.setFromEuler(tg.rot);
-        qC.setFromEuler(obj.rotation);
-        qC.slerp(qT, blend);
-        obj.rotation.setFromQuaternion(qC);
-      }
-      if (intent === 'wave') {
-        rArm.rotation.z += Math.sin(now / 180) * 0.04;
-      }
-      if (intent === 'wiggle_hips') {
-        hips.rotation.z += Math.sin(now / 140) * 0.04;
+      const dt = 0.016;
+
+      if (intent === 'walk') {
+        const dx = walkTarget.x - body.position.x;
+        const dz = walkTarget.z - body.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 0.06) {
+          const step = Math.min(dist, walkSpeed * dt);
+          body.position.x += (dx / dist) * step;
+          body.position.z += (dz / dist) * step;
+          faceY = Math.atan2(dx, dz);
+          body.rotation.y = faceY;
+          const g = now / 140;
+          lThigh.rotation.x = Math.sin(g) * 0.55;
+          rThigh.rotation.x = Math.sin(g + Math.PI) * 0.55;
+          lShin.rotation.x = Math.max(0, -Math.sin(g) * 0.35);
+          rShin.rotation.x = Math.max(0, -Math.sin(g + Math.PI) * 0.35);
+          lArm.rotation.x = Math.sin(g + Math.PI) * 0.4;
+          rArm.rotation.x = Math.sin(g) * 0.4;
+          hips.position.y = 0.95 + Math.abs(Math.sin(g)) * 0.03;
+        } else {
+          marker.visible = false;
+          lThigh.rotation.x = THREE.MathUtils.lerp(lThigh.rotation.x, 0, 0.15);
+          rThigh.rotation.x = THREE.MathUtils.lerp(rThigh.rotation.x, 0, 0.15);
+          lShin.rotation.x = THREE.MathUtils.lerp(lShin.rotation.x, 0, 0.15);
+          rShin.rotation.x = THREE.MathUtils.lerp(rShin.rotation.x, 0, 0.15);
+          lArm.rotation.x = THREE.MathUtils.lerp(lArm.rotation.x, 0, 0.15);
+          rArm.rotation.x = THREE.MathUtils.lerp(rArm.rotation.x, 0, 0.15);
+        }
+        placeCam();
+      } else {
+        for (const key in parts) {
+          const obj = parts[key];
+          const tg = target[key];
+          obj.position.lerp(tg.pos, blend);
+          qT.setFromEuler(tg.rot);
+          qC.setFromEuler(obj.rotation);
+          qC.slerp(qT, blend);
+          obj.rotation.setFromQuaternion(qC);
+        }
+        if (intent === 'wave') rArm.rotation.z += Math.sin(now / 180) * 0.04;
+        if (intent === 'wiggle_hips') hips.rotation.z += Math.sin(now / 140) * 0.04;
       }
       renderer.render(scene, camera);
     })(0);
