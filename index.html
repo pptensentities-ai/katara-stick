@@ -19,7 +19,7 @@
     <button type="button" onclick="setIntent('sit_cross')">sit</button>
     <button type="button" onclick="setIntent('wave')">wave</button>
     <button type="button" onclick="setIntent('wiggle_hips')">wiggle</button>
-    <span id="state">loading 3D…</span>
+    <span id="state">stand</span>
   </div>
   <canvas id="c"></canvas>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
@@ -31,9 +31,8 @@
     camera.lookAt(0, 0.9, 0);
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     function fit() {
-      const w = innerWidth, h = innerHeight;
-      renderer.setSize(w, h, false);
-      camera.aspect = w / h;
+      renderer.setSize(innerWidth, innerHeight, false);
+      camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();
     }
     fit();
@@ -56,36 +55,79 @@
     lThigh.position.set(-0.12, -0.05, 0); rThigh.position.set(0.12, -0.05, 0);
     lShin.position.y = -0.38; rShin.position.y = -0.38;
 
-    const poses = {
-      stand: function () {
-        hips.position.set(0, 0.95, 0); hips.rotation.set(0,0,0);
-        lArm.rotation.set(0,0,0.4); rArm.rotation.set(0,0,-0.4);
-        lThigh.rotation.set(0,0,0.05); rThigh.rotation.set(0,0,-0.05);
-        lShin.rotation.set(0,0,0); rShin.rotation.set(0,0,0);
+    const parts = { hips: hips, lArm: lArm, rArm: rArm, lThigh: lThigh, rThigh: rThigh, lShin: lShin, rShin: rShin };
+    function P(x,y,z, rx,ry,rz) {
+      return { pos: new THREE.Vector3(x,y,z), rot: new THREE.Euler(rx,ry,rz) };
+    }
+    const catalog = {
+      stand: {
+        hips: P(0, 0.95, 0, 0,0,0),
+        lArm: P(-0.18, 0.12, 0, 0,0,0.4),
+        rArm: P(0.18, 0.12, 0, 0,0,-0.4),
+        lThigh: P(-0.12, -0.05, 0, 0,0,0.05),
+        rThigh: P(0.12, -0.05, 0, 0,0,-0.05),
+        lShin: P(0, -0.38, 0, 0,0,0),
+        rShin: P(0, -0.38, 0, 0,0,0)
       },
-      sit_cross: function () {
-        hips.position.set(0, 0.28, 0); hips.rotation.set(0.15,0,0);
-        lArm.rotation.set(0.2,0,0.5); rArm.rotation.set(0.2,0,-0.5);
-        lThigh.rotation.set(1.1,0.6,0.7); rThigh.rotation.set(1.1,-0.6,-0.7);
-        lShin.rotation.set(1.3,0.2,0); rShin.rotation.set(1.3,-0.2,0);
+      sit_cross: {
+        hips: P(0, 0.28, 0, 0.15,0,0),
+        lArm: P(-0.18, 0.12, 0, 0.2,0,0.5),
+        rArm: P(0.18, 0.12, 0, 0.2,0,-0.5),
+        lThigh: P(-0.12, -0.05, 0, 1.1,0.6,0.7),
+        rThigh: P(0.12, -0.05, 0, 1.1,-0.6,-0.7),
+        lShin: P(0, -0.38, 0, 1.3,0.2,0),
+        rShin: P(0, -0.38, 0, 1.3,-0.2,0)
       },
-      wave: function () { poses.stand(); rArm.rotation.set(0,0,-2.4); },
-      wiggle_hips: function () { poses.stand(); hips.rotation.z = 0.25; }
+      wave: {
+        hips: P(0, 0.95, 0, 0,0,0),
+        lArm: P(-0.18, 0.12, 0, 0,0,0.4),
+        rArm: P(0.18, 0.12, 0, 0,0,-2.2),
+        lThigh: P(-0.12, -0.05, 0, 0,0,0.05),
+        rThigh: P(0.12, -0.05, 0, 0,0,-0.05),
+        lShin: P(0, -0.38, 0, 0,0,0),
+        rShin: P(0, -0.38, 0, 0,0,0)
+      },
+      wiggle_hips: {
+        hips: P(0, 0.95, 0, 0,0,0),
+        lArm: P(-0.18, 0.12, 0, 0,0,0.55),
+        rArm: P(0.18, 0.12, 0, 0,0,-0.55),
+        lThigh: P(-0.12, -0.05, 0, 0,0,0.08),
+        rThigh: P(0.12, -0.05, 0, 0,0,-0.08),
+        lShin: P(0, -0.38, 0, 0,0,0),
+        rShin: P(0, -0.38, 0, 0,0,0)
+      }
     };
 
     var intent = 'stand';
+    var target = catalog.stand;
+    var qT = new THREE.Quaternion();
+    var qC = new THREE.Quaternion();
     window.setIntent = function (name) {
-      if (!poses[name]) name = 'stand';
+      if (!catalog[name]) name = 'stand';
       intent = name;
-      poses[intent]();
+      target = catalog[intent];
       document.getElementById('state').textContent = intent;
     };
-    setIntent(new URLSearchParams(location.search).get('intent') || 'wave');
+    setIntent(new URLSearchParams(location.search).get('intent') || 'stand');
 
+    const blend = 0.08;
     (function loop(now) {
       requestAnimationFrame(loop);
-      if (intent === 'wave') rArm.rotation.z = -2.1 + Math.sin(now / 180) * 0.45;
-      if (intent === 'wiggle_hips') hips.rotation.z = Math.sin(now / 140) * 0.35;
+      for (const key in parts) {
+        const obj = parts[key];
+        const tg = target[key];
+        obj.position.lerp(tg.pos, blend);
+        qT.setFromEuler(tg.rot);
+        qC.setFromEuler(obj.rotation);
+        qC.slerp(qT, blend);
+        obj.rotation.setFromQuaternion(qC);
+      }
+      if (intent === 'wave') {
+        rArm.rotation.z += Math.sin(now / 180) * 0.04;
+      }
+      if (intent === 'wiggle_hips') {
+        hips.rotation.z += Math.sin(now / 140) * 0.04;
+      }
       renderer.render(scene, camera);
     })(0);
   </script>
