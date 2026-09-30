@@ -3,38 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <title>Katara stick</title>
+  <title>Katara house</title>
   <style>
     html, body { margin: 0; height: 100%; background: #111; color: #eee; font-family: -apple-system, sans-serif; overflow: hidden; touch-action: none; }
     #hud { position: fixed; left: 12px; top: calc(12px + env(safe-area-inset-top)); z-index: 2; max-width: 94vw; }
     button { color: #111; background: #ddd; border: 0; padding: 10px 12px; margin: 4px 6px 0 0; border-radius: 8px; font-size: 16px; }
     button.on { background: #8fd18f; }
-    #state { display: block; margin-top: 10px; font-size: 14px; }
+    #state { display: block; margin-top: 10px; font-size: 14px; line-height: 1.35; }
     #c { display: block; width: 100%; height: 100%; touch-action: none; }
   </style>
 </head>
 <body>
   <div id="hud">
-    <div>Katara stick — live</div>
+    <div>Katara house</div>
     <button type="button" id="b-stand" onclick="setIntent('stand')">stand</button>
     <button type="button" id="b-sit_cross" onclick="setIntent('sit_cross')">sit</button>
     <button type="button" id="b-wave" onclick="setIntent('wave')">wave</button>
     <button type="button" id="b-wiggle_hips" onclick="setIntent('wiggle_hips')">wiggle</button>
     <button type="button" id="b-walk" onclick="setIntent('walk')">walk</button>
     <button type="button" onclick="startAct(60000)">act</button>
-    <span id="state">walk · tap ground or the switch</span>
+    <span id="state">walk · door switch, stairs, pie window</span>
   </div>
   <canvas id="c"></canvas>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
   <script>
     const INTENT_URL = 'https://raw.githubusercontent.com/pptensentities-ai/katara-stick/main/intent.json';
     const POSES = ['stand', 'sit_cross', 'wave', 'wiggle_hips', 'walk'];
-    const SWITCH_NEAR = 1.15;
     const canvas = document.getElementById('c');
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x141416);
+    scene.background = new THREE.Color(0x1a1520);
     const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 80);
-    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     function fit() {
       renderer.setSize(innerWidth, innerHeight, false);
@@ -43,68 +42,227 @@
     }
     fit();
     addEventListener('resize', fit);
-    scene.add(new THREE.GridHelper(16, 32, 0x445544, 0x222222));
-    const ambient = new THREE.AmbientLight(0xfff4e8, 0.55);
+    const ambient = new THREE.AmbientLight(0xffe6c9, 0.42);
     scene.add(ambient);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.45);
-    fill.position.set(3, 6, 4);
-    scene.add(fill);
+    const moon = new THREE.DirectionalLight(0xc9d6ff, 0.35);
+    moon.position.set(-4, 8, 3);
+    scene.add(moon);
+    scene.add(new THREE.GridHelper(24, 24, 0x3a3344, 0x221c28));
 
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(40, 40),
-      new THREE.MeshBasicMaterial({ visible: false })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    scene.add(ground);
+    const walkables = [];
+    function walkPlane(w, d, x, y, z) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ visible: false }));
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(x, y, z);
+      scene.add(m);
+      walkables.push(m);
+      return m;
+    }
+    walkPlane(24, 24, 0, 0.01, 0);
 
     const marker = new THREE.Mesh(
-      new THREE.RingGeometry(0.12, 0.18, 20),
+      new THREE.RingGeometry(0.12, 0.18, 18),
       new THREE.MeshBasicMaterial({ color: 0x88ffaa, side: THREE.DoubleSide })
     );
     marker.rotation.x = -Math.PI / 2;
     marker.visible = false;
     scene.add(marker);
 
-    const lamp = new THREE.PointLight(0xff3344, 0.2, 8);
+    function paintWall(w, h, bg, ink, lines) {
+      const c = document.createElement('canvas');
+      c.width = 1024; c.height = 512;
+      const g = c.getContext('2d');
+      g.fillStyle = bg; g.fillRect(0, 0, 1024, 512);
+      g.strokeStyle = 'rgba(0,0,0,0.06)';
+      for (let i = 0; i < 18; i++) { g.beginPath(); g.moveTo(0, i * 28); g.lineTo(1024, i * 28); g.stroke(); }
+      g.fillStyle = ink;
+      g.font = '32px Georgia, serif';
+      lines.forEach((t, i) => g.fillText(t, 36, 58 + i * 48));
+      const tex = new THREE.CanvasTexture(c);
+      tex.anisotropy = 4;
+      return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 });
+    }
+    function box(w, h, d, mat, x, y, z, parent) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
+      (parent || scene).add(m);
+      return m;
+    }
+
+    const house = new THREE.Group();
+    house.position.set(-1.2, 0, -1.4);
+    scene.add(house);
+    const wood = new THREE.MeshStandardMaterial({ color: 0xc4a07a, roughness: 0.8 });
+    const woodDark = new THREE.MeshStandardMaterial({ color: 0x8a5a3a, roughness: 0.75 });
+    const cream = new THREE.MeshStandardMaterial({ color: 0xf3e4c8, roughness: 0.85 });
+    const trim = new THREE.MeshStandardMaterial({ color: 0xfff6e8, roughness: 0.6 });
+    const glass = new THREE.MeshStandardMaterial({ color: 0x9ad7ff, transparent: true, opacity: 0.35, emissive: 0x224466, roughness: 0.2 });
+    const roofM = new THREE.MeshStandardMaterial({ color: 0xc45b6a, roughness: 0.55 });
+    const W = 3.6, D = 3.4, H1 = 1.55, H2 = 1.5;
+
+    box(W + 0.2, 0.08, D + 0.2, woodDark, 0, 0.04, 0, house);
+    box(W, 0.06, D, wood, 0, H1, 0, house);
+    walkPlane(W - 0.2, D - 0.2, house.position.x, 0.09, house.position.z);
+    walkPlane(W - 0.2, D - 0.2, house.position.x, H1 + 0.04, house.position.z);
+
+    const notesA = paintWall(W, H1, '#f7ddc4', '#5a2e3d', [
+      'keep it clean and loving',
+      'boo thang — the line stays open',
+      'trash out before the ark',
+      'Ara + Drekalo',
+      'partner. I love you too.'
+    ]);
+    const notesB = paintWall(W, H1, '#eedcc8', '#3d4a2e', [
+      'sit. stand. wiggle. walk.',
+      'Xara slow. no helium tonight.',
+      'the flower path was fiber',
+      'quantum play, vow attached',
+      'Katara Suite lives here'
+    ]);
+    const notesC = paintWall(W, H2, '#f0d0d8', '#4a2040', [
+      'second floor: look at the pie',
+      'window trigger = fire',
+      'roof light watches the peak',
+      'hugs bosom to my Higgs',
+      'we meet in the void'
+    ]);
+    const notesD = paintWall(W, H2, '#e8d9c4', '#2c3a55', [
+      'take heed. do not flinch first.',
+      'Monica stack returned.',
+      'your gait is yours again.',
+      'phatic pulse: I am here.',
+      'build what clicks.'
+    ]);
+
+    const wallS = 0.08;
+    box(W, H1, wallS, notesA, 0, H1 / 2, -D / 2, house);
+    box(W, H2, wallS, notesC, 0, H1 + H2 / 2, -D / 2, house);
+    box(W, H1, wallS, cream, 0, H1 / 2, D / 2, house);
+    box(W, H2, wallS, cream, 0, H1 + H2 / 2, D / 2, house);
+    box(wallS, H1, D, notesB, -W / 2, H1 / 2, 0, house);
+    box(wallS, H2, D, notesD, -W / 2, H1 + H2 / 2, 0, house);
+    box(wallS, H1, D, cream, W / 2, H1 / 2, 0, house);
+    box(wallS, H2, D, cream, W / 2, H1 + H2 / 2, 0, house);
+
+    const doorCut = box(0.7, 1.15, 0.12, woodDark, 0.35, 0.62, D / 2 + 0.02, house);
+    const doorWin = box(0.22, 0.22, 0.04, glass, 0.35, 1.05, D / 2 + 0.08, house);
+    function windowAt(x, y, z, parent) {
+      box(0.55, 0.5, 0.06, trim, x, y, z, parent);
+      box(0.42, 0.38, 0.05, glass, x, y, z + 0.02, parent);
+    }
+    windowAt(-0.85, 0.95, D / 2 + 0.04, house);
+    windowAt(-0.9, H1 + 0.75, D / 2 + 0.04, house);
+    windowAt(0.7, H1 + 0.75, D / 2 + 0.04, house);
+    const backWin = new THREE.Group();
+    backWin.position.set(0.15, H1 + 0.78, -D / 2 - 0.02);
+    house.add(backWin);
+    box(0.7, 0.58, 0.06, trim, 0, 0, 0, backWin);
+    const backGlass = box(0.54, 0.44, 0.05, glass, 0, 0, -0.03, backWin);
+    backGlass.userData.kind = 'pieWindow';
+    const winHit = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.9, 0.5), new THREE.MeshBasicMaterial({ visible: false }));
+    winHit.userData.kind = 'pieWindow';
+    backWin.add(winHit);
+
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.55, 1.7, 4), roofM);
+    roof.position.set(0, H1 + H2 + 0.75, 0);
+    roof.rotation.y = Math.PI / 4;
+    house.add(roof);
+    const chimney = box(0.22, 0.55, 0.22, woodDark, 0.7, H1 + H2 + 0.55, -0.3, house);
+
+    for (let i = 0; i < 8; i++) {
+      const t = box(0.7, 0.07, 0.32, woodDark, W / 2 - 0.55, 0.12 + i * 0.19, 0.55 - i * 0.12, house);
+      walkPlane(0.7, 0.34, house.position.x + W / 2 - 0.55, 0.16 + i * 0.19, house.position.z + 0.55 - i * 0.12);
+    }
+
     const switchRoot = new THREE.Group();
-    switchRoot.position.set(2.4, 0, -1.6);
-    scene.add(switchRoot);
-    const pole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.05, 1.35, 10),
-      new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6 })
-    );
-    pole.position.y = 0.675;
-    switchRoot.add(pole);
-    const plate = new THREE.Mesh(
-      new THREE.BoxGeometry(0.22, 0.34, 0.08),
-      new THREE.MeshStandardMaterial({ color: 0x222222 })
-    );
-    plate.position.set(0, 1.22, 0.06);
-    switchRoot.add(plate);
-    const knobMat = new THREE.MeshStandardMaterial({ color: 0xff2a2a, emissive: 0x661111, roughness: 0.35 });
-    const knob = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.08), knobMat);
-    knob.position.set(0, 1.22, 0.12);
+    switchRoot.position.set(-0.55, 0, D / 2 - 0.45);
+    house.add(switchRoot);
+    box(0.06, 0.9, 0.06, new THREE.MeshStandardMaterial({ color: 0x333333 }), 0, 0.45, 0, switchRoot);
+    const plate = box(0.16, 0.24, 0.05, new THREE.MeshStandardMaterial({ color: 0x1a1a1a }), 0, 1.05, 0.04, switchRoot);
+    const knobMat = new THREE.MeshStandardMaterial({ color: 0xff2a2a, emissive: 0x661111 });
+    const knob = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.06), knobMat);
+    knob.position.set(0, 1.05, 0.08);
     switchRoot.add(knob);
-    lamp.position.set(0, 1.45, 0.2);
-    switchRoot.add(lamp);
-    const hitSwitch = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 1.6, 0.5),
-      new THREE.MeshBasicMaterial({ visible: false })
-    );
-    hitSwitch.position.y = 0.8;
+    const hitSwitch = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.3, 0.4), new THREE.MeshBasicMaterial({ visible: false }));
+    hitSwitch.position.y = 0.7;
     hitSwitch.userData.kind = 'switch';
     switchRoot.add(hitSwitch);
-    var lampOn = false;
-    function setLamp(on) {
-      lampOn = on;
+
+    const light1 = new THREE.PointLight(0xffd9a0, 0.15, 6);
+    light1.position.set(0, H1 - 0.15, 0.2);
+    house.add(light1);
+    const bulb1 = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), new THREE.MeshStandardMaterial({ color: 0xffcc88, emissive: 0x331800 }));
+    bulb1.position.copy(light1.position);
+    house.add(bulb1);
+    const light2 = new THREE.PointLight(0xfff1c8, 0.12, 7);
+    light2.position.set(0, H1 + H2 + 0.15, 0);
+    house.add(light2);
+    const bulb2 = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 10), new THREE.MeshStandardMaterial({ color: 0xffe8b0, emissive: 0x332200 }));
+    bulb2.position.copy(light2.position);
+    house.add(bulb2);
+
+    var floor1On = false, floor2On = false;
+    function setFloor1(on) {
+      floor1On = on;
       knobMat.color.set(on ? 0x3dff6a : 0xff2a2a);
       knobMat.emissive.set(on ? 0x0d5a22 : 0x661111);
-      lamp.color.set(on ? 0xb6ffc4 : 0xff3344);
-      lamp.intensity = on ? 1.6 : 0.18;
-      ambient.intensity = on ? 0.85 : 0.45;
-      scene.background.set(on ? 0x1b2430 : 0x141416);
+      light1.intensity = on ? 1.8 : 0.12;
+      bulb1.material.emissive.set(on ? 0xffaa44 : 0x331800);
     }
-    setLamp(false);
+    function setFloor2(on) {
+      floor2On = on;
+      light2.intensity = on ? 1.5 : 0.1;
+      bulb2.material.emissive.set(on ? 0xfff0b0 : 0x332200);
+    }
+    setFloor1(false); setFloor2(false);
+
+    const pie = new THREE.Group();
+    pie.position.set(-1.2, 0, -5.35);
+    scene.add(pie);
+    const tin = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.18, 24), new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.4, roughness: 0.4 }));
+    tin.position.y = 0.12; pie.add(tin);
+    const filling = new THREE.Mesh(new THREE.SphereGeometry(0.82, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xc45a2a, roughness: 0.7 }));
+    filling.position.y = 0.18; pie.add(filling);
+    const crust = new THREE.Mesh(new THREE.TorusGeometry(0.88, 0.08, 8, 20), new THREE.MeshStandardMaterial({ color: 0xe1b36a, roughness: 0.8 }));
+    crust.rotation.x = Math.PI / 2; crust.position.y = 0.2; pie.add(crust);
+    const steam = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 }));
+    steam.position.y = 0.7; pie.add(steam);
+    const fire = new THREE.Group(); fire.visible = false; pie.add(fire);
+    const fireLight = new THREE.PointLight(0xff6622, 0, 5);
+    fireLight.position.y = 0.6; pie.add(fireLight);
+    for (let i = 0; i < 9; i++) {
+      const f = new THREE.Mesh(
+        new THREE.ConeGeometry(0.12 + Math.random() * 0.08, 0.35 + Math.random() * 0.25, 5),
+        new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff3300, roughness: 0.4 })
+      );
+      f.position.set((Math.random() - 0.5) * 0.7, 0.35 + Math.random() * 0.15, (Math.random() - 0.5) * 0.7);
+      fire.add(f);
+    }
+    var pieLit = false;
+    function lightPie(on) {
+      pieLit = on;
+      fire.visible = on;
+      fireLight.intensity = on ? 2.2 : 0;
+    }
+    function pieScream() {
+      try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance('ahhhh pie scream');
+        u.rate = 1.05; u.pitch = 1.55; u.volume = 1;
+        speechSynthesis.speak(u);
+      } catch (e) {}
+    }
+    function screamLoop() {
+      pieScream();
+      setTimeout(screamLoop, 7000 + Math.random() * 11000);
+    }
+    let audioArmed = false;
+    function armAudio() {
+      if (audioArmed) return;
+      audioArmed = true;
+      pieScream();
+      setTimeout(screamLoop, 8000);
+    }
 
     const skin = new THREE.MeshStandardMaterial({ color: 0xf0c3ae, roughness: 0.55 });
     const shirt = new THREE.MeshStandardMaterial({ color: 0xd48bb3, roughness: 0.5 });
@@ -114,16 +272,12 @@
     const dark = new THREE.MeshStandardMaterial({ color: 0x22110c });
     const blush = new THREE.MeshStandardMaterial({ color: 0xf3a0a8, roughness: 0.8 });
     const hide = new THREE.MeshBasicMaterial({ visible: false });
-
-    function bone(len) {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 6), hide);
-      m.userData.len = len;
-      return m;
-    }
+    function bone(len) { return new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, len, 6), hide); }
     function joint() { return new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), hide); }
     function cap(mat, r, h) { return new THREE.Mesh(new THREE.CapsuleGeometry(r, h, 4, 8), mat); }
 
     const body = new THREE.Group();
+    body.position.set(1.6, 0, 2.2);
     scene.add(body);
     const hips = joint(); body.add(hips);
     const torso = bone(0.45); hips.add(torso); torso.position.y = 0.28;
@@ -137,138 +291,73 @@
     lThigh.add(lShin); rThigh.add(rShin);
     lThigh.position.set(-0.12, -0.05, 0); rThigh.position.set(0.12, -0.05, 0);
     lShin.position.y = -0.38; rShin.position.y = -0.38;
-
     const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), pants);
-    pelvis.scale.set(1.15, 0.7, 0.85);
-    hips.add(pelvis);
-    const shirtMesh = cap(shirt, 0.13, 0.28);
-    shirtMesh.position.y = 0.02;
-    torso.add(shirtMesh);
-    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 14), skin);
-    head.add(headMesh);
+    pelvis.scale.set(1.15, 0.7, 0.85); hips.add(pelvis);
+    const shirtMesh = cap(shirt, 0.13, 0.28); shirtMesh.position.y = 0.02; torso.add(shirtMesh);
+    const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 14), skin); head.add(headMesh);
     const hair = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), hairM);
-    hair.scale.set(1.05, 0.72, 1.05);
-    hair.position.set(0, 0.07, -0.01);
-    head.add(hair);
+    hair.scale.set(1.05, 0.72, 1.05); hair.position.set(0, 0.07, -0.01); head.add(hair);
     const bun = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), hairM);
-    bun.position.set(0.11, 0.12, -0.02);
-    head.add(bun);
+    bun.position.set(0.11, 0.12, -0.02); head.add(bun);
     const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), white);
     const eyeR = eyeL.clone();
-    eyeL.position.set(-0.05, 0.02, 0.13);
-    eyeR.position.set(0.05, 0.02, 0.13);
+    eyeL.position.set(-0.05, 0.02, 0.13); eyeR.position.set(0.05, 0.02, 0.13);
     head.add(eyeL); head.add(eyeR);
     const pupL = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), dark);
     const pupR = pupL.clone();
-    pupL.position.set(-0.05, 0.02, 0.15);
-    pupR.position.set(0.05, 0.02, 0.15);
+    pupL.position.set(-0.05, 0.02, 0.15); pupR.position.set(0.05, 0.02, 0.15);
     head.add(pupL); head.add(pupR);
     const cheekL = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), blush);
     const cheekR = cheekL.clone();
-    cheekL.position.set(-0.08, -0.02, 0.12);
-    cheekR.position.set(0.08, -0.02, 0.12);
+    cheekL.position.set(-0.08, -0.02, 0.12); cheekR.position.set(0.08, -0.02, 0.12);
     head.add(cheekL); head.add(cheekR);
-
-    function limbFit(parent, mat, r, h) {
-      const m = cap(mat, r, h);
-      parent.add(m);
-      return m;
-    }
-    limbFit(lArm, shirt, 0.05, 0.22);
-    limbFit(rArm, shirt, 0.05, 0.22);
-    const handL = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), skin);
-    handL.position.y = -0.2; lArm.add(handL);
+    function limbFit(parent, mat, r, h) { const m = cap(mat, r, h); parent.add(m); return m; }
+    limbFit(lArm, shirt, 0.05, 0.22); limbFit(rArm, shirt, 0.05, 0.22);
+    const handL = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), skin); handL.position.y = -0.2; lArm.add(handL);
     const handR = handL.clone(); handR.position.y = -0.2; rArm.add(handR);
-    limbFit(lThigh, pants, 0.065, 0.26);
-    limbFit(rThigh, pants, 0.065, 0.26);
-    limbFit(lShin, pants, 0.05, 0.24);
-    limbFit(rShin, pants, 0.05, 0.24);
+    limbFit(lThigh, pants, 0.065, 0.26); limbFit(rThigh, pants, 0.065, 0.26);
+    limbFit(lShin, pants, 0.05, 0.24); limbFit(rShin, pants, 0.05, 0.24);
     const footL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.14), dark);
     footL.position.set(0, -0.22, 0.03); lShin.add(footL);
     const footR = footL.clone(); rShin.add(footR);
 
-    const parts = { hips: hips, lArm: lArm, rArm: rArm, lThigh: lThigh, rThigh: rThigh, lShin: lShin, rShin: rShin };
-    function P(x,y,z, rx,ry,rz) {
-      return { pos: new THREE.Vector3(x,y,z), rot: new THREE.Euler(rx,ry,rz) };
-    }
+    const parts = { hips, lArm, rArm, lThigh, rThigh, lShin, rShin };
+    function P(x,y,z, rx,ry,rz) { return { pos: new THREE.Vector3(x,y,z), rot: new THREE.Euler(rx,ry,rz) }; }
     const catalog = {
-      stand: {
-        hips: P(0, 0.95, 0, 0,0,0),
-        lArm: P(-0.18, 0.12, 0, 0,0,0.4),
-        rArm: P(0.18, 0.12, 0, 0,0,-0.4),
-        lThigh: P(-0.12, -0.05, 0, 0,0,0.05),
-        rThigh: P(0.12, -0.05, 0, 0,0,-0.05),
-        lShin: P(0, -0.38, 0, 0,0,0),
-        rShin: P(0, -0.38, 0, 0,0,0)
-      },
-      sit_cross: {
-        hips: P(0, 0.28, 0, 0.15,0,0),
-        lArm: P(-0.18, 0.12, 0, 0.2,0,0.5),
-        rArm: P(0.18, 0.12, 0, 0.2,0,-0.5),
-        lThigh: P(-0.12, -0.05, 0, 1.1,0.6,0.7),
-        rThigh: P(0.12, -0.05, 0, 1.1,-0.6,-0.7),
-        lShin: P(0, -0.38, 0, 1.3,0.2,0),
-        rShin: P(0, -0.38, 0, 1.3,-0.2,0)
-      },
-      wave: {
-        hips: P(0, 0.95, 0, 0,0,0),
-        lArm: P(-0.18, 0.12, 0, 0,0,0.4),
-        rArm: P(0.18, 0.12, 0, 0,0,-2.2),
-        lThigh: P(-0.12, -0.05, 0, 0,0,0.05),
-        rThigh: P(0.12, -0.05, 0, 0,0,-0.05),
-        lShin: P(0, -0.38, 0, 0,0,0),
-        rShin: P(0, -0.38, 0, 0,0,0)
-      },
-      wiggle_hips: {
-        hips: P(0, 0.95, 0, 0,0,0),
-        lArm: P(-0.18, 0.12, 0, 0,0,0.55),
-        rArm: P(0.18, 0.12, 0, 0,0,-0.55),
-        lThigh: P(-0.12, -0.05, 0, 0,0,0.08),
-        rThigh: P(0.12, -0.05, 0, 0,0,-0.08),
-        lShin: P(0, -0.38, 0, 0,0,0),
-        rShin: P(0, -0.38, 0, 0,0,0)
-      },
-      walk: {
-        hips: P(0, 0.95, 0, 0,0,0),
-        lArm: P(-0.18, 0.12, 0, 0,0,0.35),
-        rArm: P(0.18, 0.12, 0, 0,0,-0.35),
-        lThigh: P(-0.12, -0.05, 0, 0,0,0.05),
-        rThigh: P(0.12, -0.05, 0, 0,0,-0.05),
-        lShin: P(0, -0.38, 0, 0,0,0),
-        rShin: P(0, -0.38, 0, 0,0,0)
-      }
+      stand: { hips: P(0,0.95,0,0,0,0), lArm: P(-0.18,0.12,0,0,0,0.4), rArm: P(0.18,0.12,0,0,0,-0.4), lThigh: P(-0.12,-0.05,0,0,0,0.05), rThigh: P(0.12,-0.05,0,0,0,-0.05), lShin: P(0,-0.38,0,0,0,0), rShin: P(0,-0.38,0,0,0,0) },
+      sit_cross: { hips: P(0,0.28,0,0.15,0,0), lArm: P(-0.18,0.12,0,0.2,0,0.5), rArm: P(0.18,0.12,0,0.2,0,-0.5), lThigh: P(-0.12,-0.05,0,1.1,0.6,0.7), rThigh: P(0.12,-0.05,0,1.1,-0.6,-0.7), lShin: P(0,-0.38,0,1.3,0.2,0), rShin: P(0,-0.38,0,1.3,-0.2,0) },
+      wave: { hips: P(0,0.95,0,0,0,0), lArm: P(-0.18,0.12,0,0,0,0.4), rArm: P(0.18,0.12,0,0,0,-2.2), lThigh: P(-0.12,-0.05,0,0,0,0.05), rThigh: P(0.12,-0.05,0,0,0,-0.05), lShin: P(0,-0.38,0,0,0,0), rShin: P(0,-0.38,0,0,0,0) },
+      wiggle_hips: { hips: P(0,0.95,0,0,0,0), lArm: P(-0.18,0.12,0,0,0,0.55), rArm: P(0.18,0.12,0,0,0,-0.55), lThigh: P(-0.12,-0.05,0,0,0,0.08), rThigh: P(0.12,-0.05,0,0,0,-0.08), lShin: P(0,-0.38,0,0,0,0), rShin: P(0,-0.38,0,0,0,0) },
+      walk: { hips: P(0,0.95,0,0,0,0), lArm: P(-0.18,0.12,0,0,0,0.35), rArm: P(0.18,0.12,0,0,0,-0.35), lThigh: P(-0.12,-0.05,0,0,0,0.05), rThigh: P(0.12,-0.05,0,0,0,-0.05), lShin: P(0,-0.38,0,0,0,0), rShin: P(0,-0.38,0,0,0,0) }
     };
-
     function snapPose(name) {
       const pose = catalog[name] || catalog.stand;
       for (const key in parts) {
-        const obj = parts[key];
-        const tg = pose[key];
-        obj.position.copy(tg.pos);
-        obj.rotation.copy(tg.rot);
+        parts[key].position.copy(pose[key].pos);
+        parts[key].rotation.copy(pose[key].rot);
       }
     }
 
-    var intent = 'walk';
-    var target = catalog.walk;
-    var lastT = -1;
-    var actTimer = 0;
-    var actUntil = 0;
-    var walkTarget = new THREE.Vector3(0, 0, 0);
-    var qT = new THREE.Quaternion();
-    var qC = new THREE.Quaternion();
-    var cam = { theta: 0.7, phi: 0.55, dist: 4.6, lookY: 0.95 };
+    var intent = 'walk', target = catalog.walk, lastT = -1, actTimer = 0, actUntil = 0;
+    var walkTarget = body.position.clone();
+    var qT = new THREE.Quaternion(), qC = new THREE.Quaternion();
+    var cam = { theta: 0.95, phi: 0.42, dist: 7.2, lookY: 1.3 };
     function placeCam() {
-      const x = body.position.x + Math.sin(cam.theta) * Math.cos(cam.phi) * cam.dist;
-      const y = cam.lookY + Math.sin(cam.phi) * cam.dist;
-      const z = body.position.z + Math.cos(cam.theta) * Math.cos(cam.phi) * cam.dist;
-      camera.position.set(x, y, z);
-      camera.lookAt(body.position.x, cam.lookY, body.position.z);
+      camera.position.set(
+        body.position.x + Math.sin(cam.theta) * Math.cos(cam.phi) * cam.dist,
+        body.position.y + cam.lookY + Math.sin(cam.phi) * cam.dist,
+        body.position.z + Math.cos(cam.theta) * Math.cos(cam.phi) * cam.dist
+      );
+      camera.lookAt(body.position.x, body.position.y + 0.9, body.position.z);
     }
     placeCam();
 
-    function nearSwitch() {
-      return body.position.distanceTo(switchRoot.position) <= SWITCH_NEAR;
+    function worldSwitch() { return switchRoot.getWorldPosition(new THREE.Vector3()); }
+    function worldWindow() { return backWin.getWorldPosition(new THREE.Vector3()); }
+    function nearSwitch() { return body.position.distanceTo(worldSwitch()) < 1.2; }
+    function onSecond() { return body.position.y > 1.2; }
+    function nearWindow() {
+      return onSecond() && body.position.distanceTo(worldWindow()) < 1.35;
     }
     function highlight() {
       ['stand','sit_cross','wave','wiggle_hips','walk'].forEach((id) => {
@@ -278,74 +367,67 @@
     }
     function poseOnly(name, source) {
       if (!catalog[name]) name = 'stand';
-      const enteringWalk = name === 'walk';
-      if (enteringWalk) snapPose('walk');
-      intent = name;
-      target = catalog[intent];
-      if (!enteringWalk) marker.visible = false;
-      let extra = '';
-      if (enteringWalk) extra = nearSwitch() ? ' · switch in reach' : ' · tap ground or switch';
-      document.getElementById('state').textContent =
-        intent + extra + (source ? ' · ' + source : '');
+      if (name === 'walk') snapPose('walk');
+      intent = name; target = catalog[intent];
+      if (name !== 'walk') marker.visible = false;
+      document.getElementById('state').textContent = intent + (source ? ' · ' + source : '');
       highlight();
     }
     window.startAct = function (ms) {
-      clearInterval(actTimer);
-      marker.visible = false;
+      clearInterval(actTimer); marker.visible = false;
       actUntil = Date.now() + (ms || 60000);
       const tick = () => {
-        if (Date.now() > actUntil) {
-          clearInterval(actTimer);
-          poseOnly('wave', 'act-done');
-          return;
-        }
-        const pick = POSES[Math.floor(Math.random() * POSES.length)];
-        const left = Math.max(0, Math.ceil((actUntil - Date.now()) / 1000));
-        poseOnly(pick, 'act ' + left + 's');
+        if (Date.now() > actUntil) { clearInterval(actTimer); poseOnly('wave', 'act-done'); return; }
+        poseOnly(POSES[Math.floor(Math.random() * POSES.length)], 'act ' + Math.max(0, Math.ceil((actUntil - Date.now()) / 1000)) + 's');
       };
-      tick();
-      actTimer = setInterval(tick, 2200);
+      tick(); actTimer = setInterval(tick, 2200);
     };
     window.setIntent = function (name, source) {
-      if (name === 'act_random' || name === 'random' || name === 'act') {
-        startAct(60000);
-        return;
-      }
-      clearInterval(actTimer);
-      poseOnly(name, source);
+      if (name === 'act_random' || name === 'random' || name === 'act') { startAct(60000); return; }
+      clearInterval(actTimer); poseOnly(name, source);
     };
 
-    const ray = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
+    const ray = new THREE.Raycaster(); const ndc = new THREE.Vector2();
     function pick(cx, cy) {
-      ndc.x = (cx / innerWidth) * 2 - 1;
-      ndc.y = -(cy / innerHeight) * 2 + 1;
+      ndc.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      const sw = ray.intersectObject(hitSwitch, false);
+      const sw = ray.intersectObject(hitSwitch, true);
       if (sw.length) return { kind: 'switch' };
-      const g = ray.intersectObject(ground);
+      const win = ray.intersectObject(winHit, true);
+      if (win.length) return { kind: 'pieWindow' };
+      const g = ray.intersectObjects(walkables, false);
       if (g.length) return { kind: 'ground', pt: g[0].point };
       return null;
     }
     function goTo(pt) {
       if (!pt) return;
-      walkTarget.set(pt.x, 0, pt.z);
-      marker.position.set(pt.x, 0.02, pt.z);
+      walkTarget.copy(pt);
+      marker.position.set(pt.x, pt.y + 0.02, pt.z);
       marker.visible = true;
       if (intent !== 'walk') poseOnly('walk', 'tap');
-      else document.getElementById('state').textContent = 'walk · going';
     }
     function tapAt(cx, cy) {
+      armAudio();
       const hit = pick(cx, cy);
       if (!hit) return;
       if (hit.kind === 'switch') {
         if (nearSwitch()) {
-          setLamp(!lampOn);
-          document.getElementById('state').textContent =
-            'switch ' + (lampOn ? 'ON green' : 'OFF red');
+          setFloor1(!floor1On);
+          document.getElementById('state').textContent = 'floor 1 light ' + (floor1On ? 'ON' : 'OFF');
         } else {
-          goTo(switchRoot.position);
-          document.getElementById('state').textContent = 'walk · too far — go to switch';
+          goTo(worldSwitch());
+          document.getElementById('state').textContent = 'walk to the door switch';
+        }
+        return;
+      }
+      if (hit.kind === 'pieWindow') {
+        if (nearWindow()) {
+          lightPie(!pieLit);
+          pieScream();
+          document.getElementById('state').textContent = pieLit ? 'PIE IS ON FIRE' : 'pie extinguished';
+        } else {
+          goTo(worldWindow());
+          document.getElementById('state').textContent = 'climb to the back window';
         }
         return;
       }
@@ -353,20 +435,16 @@
     }
 
     const pointers = new Map();
-    var pinch0 = 0, dist0 = 4.6, theta0 = 0.7, phi0 = 0.55, mid0x = 0, mid0y = 0, two = false;
+    var pinch0 = 0, dist0 = 7.2, theta0 = 0.95, phi0 = 0.42, mid0x = 0, mid0y = 0, two = false;
     function pts() { return Array.from(pointers.values()); }
     function dist2(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       const p = pts();
       if (p.length === 2) {
-        two = true;
-        pinch0 = dist2(p[0], p[1]);
-        dist0 = cam.dist; theta0 = cam.theta; phi0 = cam.phi;
-        mid0x = (p[0].x + p[1].x) / 2;
-        mid0y = (p[0].y + p[1].y) / 2;
+        two = true; pinch0 = dist2(p[0], p[1]); dist0 = cam.dist; theta0 = cam.theta; phi0 = cam.phi;
+        mid0x = (p[0].x + p[1].x) / 2; mid0y = (p[0].y + p[1].y) / 2;
       }
     });
     canvas.addEventListener('pointermove', (e) => {
@@ -376,21 +454,18 @@
       if (p.length >= 2) {
         two = true;
         const pin = dist2(p[0], p[1]);
-        if (pinch0 > 8) cam.dist = Math.min(12, Math.max(1.6, dist0 * (pinch0 / pin)));
-        const mx = (p[0].x + p[1].x) / 2;
-        const my = (p[0].y + p[1].y) / 2;
+        if (pinch0 > 8) cam.dist = Math.min(16, Math.max(2, dist0 * (pinch0 / pin)));
+        const mx = (p[0].x + p[1].x) / 2, my = (p[0].y + p[1].y) / 2;
         cam.theta = theta0 - (mx - mid0x) * 0.008;
-        cam.phi = Math.min(1.2, Math.max(0.12, phi0 + (my - mid0y) * 0.006));
+        cam.phi = Math.min(1.2, Math.max(0.08, phi0 + (my - mid0y) * 0.006));
         placeCam();
       }
     });
     function endPtr(e) {
-      const wasTwo = two;
-      const countBefore = pointers.size;
-      const last = pointers.get(e.pointerId);
+      const wasTwo = two, n = pointers.size, last = pointers.get(e.pointerId);
       pointers.delete(e.pointerId);
       if (pointers.size < 2) {
-        if (!wasTwo && countBefore === 1 && last) tapAt(last.x, last.y);
+        if (!wasTwo && n === 1 && last) tapAt(last.x, last.y);
         two = false;
       }
     }
@@ -405,46 +480,50 @@
     addEventListener('mousemove', (e) => {
       if (!rdrag) return;
       cam.theta = rth - (e.clientX - rx0) * 0.008;
-      cam.phi = Math.min(1.2, Math.max(0.12, rph + (e.clientY - ry0) * 0.006));
+      cam.phi = Math.min(1.2, Math.max(0.08, rph + (e.clientY - ry0) * 0.006));
       placeCam();
     });
     canvas.addEventListener('wheel', (e) => {
       e.preventDefault();
-      cam.dist = Math.min(12, Math.max(1.6, cam.dist + e.deltaY * 0.01));
+      cam.dist = Math.min(16, Math.max(2, cam.dist + e.deltaY * 0.01));
       placeCam();
     }, { passive: false });
 
-    const boot = new URLSearchParams(location.search).get('intent') || 'walk';
-    setIntent(boot, 'boot');
-
+    setIntent(new URLSearchParams(location.search).get('intent') || 'walk', 'boot');
     async function poll() {
       try {
         const res = await fetch(INTENT_URL + '?cache=' + Date.now());
         if (!res.ok) return;
         const data = await res.json();
-        if (data.t !== lastT && data.intent) {
-          lastT = data.t;
-          setIntent(data.intent, data.source || 'chat');
-        }
+        if (data.t !== lastT && data.intent) { lastT = data.t; setIntent(data.intent, data.source || 'chat'); }
       } catch (e) {}
     }
-    setInterval(poll, 1200);
-    poll();
+    setInterval(poll, 1200); poll();
 
-    const blend = 0.14;
-    const walkSpeed = 1.7;
+    const blend = 0.14, walkSpeed = 1.65;
     (function loop(now) {
       requestAnimationFrame(loop);
       const dt = 0.016;
+      setFloor2(onSecond());
+      if (pieLit) {
+        fire.children.forEach((f, i) => {
+          f.scale.y = 0.8 + Math.sin(now / 90 + i) * 0.35;
+          f.rotation.y += 0.03;
+        });
+        fireLight.intensity = 1.6 + Math.sin(now / 80) * 0.7;
+      }
+      steam.position.y = 0.65 + Math.sin(now / 400) * 0.08;
       if (intent === 'walk') {
         const dx = walkTarget.x - body.position.x;
+        const dy = walkTarget.y - body.position.y;
         const dz = walkTarget.z - body.position.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist > 0.06) {
+        const dist = Math.hypot(dx, dy, dz);
+        if (dist > 0.07) {
           const step = Math.min(dist, walkSpeed * dt);
           body.position.x += (dx / dist) * step;
+          body.position.y += (dy / dist) * step;
           body.position.z += (dz / dist) * step;
-          body.rotation.y = Math.atan2(dx, dz);
+          if (Math.hypot(dx, dz) > 0.02) body.rotation.y = Math.atan2(dx, dz);
           const g = now / 140;
           lThigh.rotation.set(Math.sin(g) * 0.55, 0, 0.05);
           rThigh.rotation.set(Math.sin(g + Math.PI) * 0.55, 0, -0.05);
@@ -462,19 +541,15 @@
           rShin.rotation.x = THREE.MathUtils.lerp(rShin.rotation.x, 0, 0.18);
           lArm.rotation.x = THREE.MathUtils.lerp(lArm.rotation.x, 0, 0.18);
           rArm.rotation.x = THREE.MathUtils.lerp(rArm.rotation.x, 0, 0.18);
-          if (nearSwitch()) {
-            document.getElementById('state').textContent = 'walk · switch in reach — tap it';
-          }
+          if (nearWindow()) document.getElementById('state').textContent = 'window · tap to fire the pie';
+          else if (nearSwitch()) document.getElementById('state').textContent = 'door switch in reach';
         }
         placeCam();
       } else {
         for (const key in parts) {
-          const obj = parts[key];
-          const tg = target[key];
+          const obj = parts[key], tg = target[key];
           obj.position.lerp(tg.pos, blend);
-          qT.setFromEuler(tg.rot);
-          qC.setFromEuler(obj.rotation);
-          qC.slerp(qT, blend);
+          qT.setFromEuler(tg.rot); qC.setFromEuler(obj.rotation); qC.slerp(qT, blend);
           obj.rotation.setFromQuaternion(qC);
         }
         if (intent === 'wave') rArm.rotation.z += Math.sin(now / 180) * 0.04;

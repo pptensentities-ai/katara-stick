@@ -1,15 +1,8 @@
 # katara-stick
-Public stickman for phone Chrome (no Xara).
+Cute two-floor house + walk stick.
 
-Open the latest file (hard refresh):
-
+Latest:
 https://raw.githack.com/pptensentities-ai/katara-stick/main/index.html
 
-## Controls
-
-- stand / sit / wave / wiggle / act — poses
-- **walk** — tap or click the ground to send her there
-- **two fingers** — drag to orbit the camera, pinch to zoom
-- desktop: left click walks (in walk mode); right-drag orbits; wheel zooms
-
-Ara can still write `intent.json` (`stand`, `sit_cross`, `wave`, `wiggle_hips`, `walk`, `act_random`).
+Walk, tap floors and stairs. Door switch (red/green) lights floor 1.
+Second floor roof light turns on up top. Window over the pie: stand close and tap to light the pie. Pie screams on its own.
